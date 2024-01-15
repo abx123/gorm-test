@@ -35,6 +35,11 @@ type Ledger struct {
 	Remarks      *string `gorm:"type:varchar(256)"`
 }
 
+type FindAllRes struct {
+	TotalCount  int64
+	Withdrawals []Withdrawal
+}
+
 func main() {
 	sqlInfo := fmt.Sprintf("host=%s port=%d user=%s password=%s database=%s sslmode=disable", "localhost", 5432, "postgres", "password", "test")
 	db, err := gorm.Open(postgres.Open(sqlInfo), &gorm.Config{})
@@ -59,6 +64,11 @@ func main() {
 
 	fmt.Println("Withdrawal2", ww)
 
+	arr, err := findWithdrawalByFilters(db, context.Background(), 10, 0, []string{"6e120947-e65a-4287-abe3-ae9bed9fde25", "01c7e360-4c5c-421e-94e0-93dbadeeeb5d"}, []string{"0fa6344e-d537-4255-b92a-8fa479c355da"}, nil, nil)
+	if err != nil {
+		fmt.Println("ERROR", err.Error())
+	}
+	fmt.Println("Withdrawal3", arr)
 }
 
 func createWithdrawal(db *gorm.DB, Signatures *string, addressDestination, amount, broadcasted string, ctx context.Context) (*Withdrawal, error) {
@@ -125,5 +135,45 @@ func updateWithdrawal(db *gorm.DB, remarks, txPayload, txHash *string, Signature
 		return nil, result.Error
 	}
 	return withdrawal, nil
+
+}
+
+func findWithdrawalByFilters(db *gorm.DB, ctx context.Context, limit, offset int, withdrawal_ids, blockchain_ids, asset_ids []string, order *string) (*FindAllRes, error) {
+
+	res := &FindAllRes{}
+	orderby := "created_at Desc"
+	if order != nil && *order == "asc" {
+		orderby = "created_at Asc"
+	}
+
+	condition := "true"
+	var values []interface{}
+
+	if len(withdrawal_ids) > 0 {
+		condition += " AND withdrawal_id IN (?)"
+		values = append(values, withdrawal_ids)
+	}
+
+	if len(blockchain_ids) > 0 {
+		condition += " AND blockchain_id IN (?)"
+		values = append(values, blockchain_ids)
+	}
+
+	if len(asset_ids) > 0 {
+		condition += " AND asset_id IN (?)"
+		values = append(values, asset_ids)
+	}
+	result := db.Model(&Withdrawal{}).Where(condition, values...).Order(orderby).Limit(limit).Offset(offset).Find(&res.Withdrawals)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+
+	// Retrieve total count
+	countQuery := db.Model(&Withdrawal{}).Where(condition, values...).Count(&res.TotalCount)
+	if countQuery.Error != nil {
+		return nil, countQuery.Error
+	}
+
+	return res, nil
 
 }
