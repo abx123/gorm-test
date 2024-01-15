@@ -43,16 +43,15 @@ func main() {
 	}
 
 	db.AutoMigrate(&Withdrawal{}, &Ledger{})
-
-	w, err := createWithdrawal(db, nil, nil, nil, nil, "0x123", "100", "0", context.Background())
+	sig := "Signature1"
+	w, err := createWithdrawal(db, &sig, "0x123", "100", "0", context.Background())
 	if err != nil {
 		fmt.Println("ERROR", err.Error())
 	}
 	fmt.Println("Withdrawal", w)
 	remarks := "Remarks"
-	tx_payload := "txPayload"
 	tx_hash := "txHASH"
-	ww, err := updateWithdrawal(db, &remarks, &tx_payload, &tx_hash, []string{"SIG2", "SIG3", "SIG4"}, w.WithdrawalID.String(), "NO", w.UpdatedAt, context.Background())
+	ww, err := updateWithdrawal(db, &remarks, nil, &tx_hash, []string{"SIG2", "SIG3", "SIG4"}, w.WithdrawalID.String(), "NO", w.UpdatedAt, context.Background())
 
 	if err != nil {
 		fmt.Println("ERROR", err.Error())
@@ -62,11 +61,10 @@ func main() {
 
 }
 
-func createWithdrawal(db *gorm.DB, remarks, txPayload, txHash, Signatures *string, addressDestination, amount, broadcasted string, ctx context.Context) (*Withdrawal, error) {
-	sig := "Signature1"
+func createWithdrawal(db *gorm.DB, Signatures *string, addressDestination, amount, broadcasted string, ctx context.Context) (*Withdrawal, error) {
 	ledger := Ledger{
 		Broadcasted: "NO",
-		Signatures:  &sig,
+		Signatures:  Signatures,
 	}
 	withdrawal := &Withdrawal{
 		BlockchainID:       uuid.New(),
@@ -93,8 +91,17 @@ func updateWithdrawal(db *gorm.DB, remarks, txPayload, txHash *string, Signature
 		}
 		return nil, r.Error
 	}
-	val := withdrawal.Ledgers[len(withdrawal.Ledgers)-1].Signatures
-	signatureString := strings.Join(Signatures, ",") + "," + *val
+	var val *string
+
+	if withdrawal.Ledgers[len(withdrawal.Ledgers)-1].Signatures != nil {
+		val = withdrawal.Ledgers[len(withdrawal.Ledgers)-1].Signatures
+	}
+
+	signatureString := strings.Join(Signatures, ",")
+
+	if val != nil {
+		signatureString = *val + "," + signatureString
+	}
 
 	newLedger := Ledger{
 		WithdrawalID: withdrawal.ID,
